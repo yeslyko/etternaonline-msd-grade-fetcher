@@ -18,7 +18,7 @@ async function sleep(ms) {
 function display_overall(data) {
     console.log(`Calculated overall MSD: ${data.overall.toFixed(2)} for rank ${data.target_rank}`);
     console.log("Filtered scores:", data.list);
-    const card_body = document.querySelector('.card-body');
+    const card_body = document.querySelector('.rank');
     if (card_body) {
         const result = document.createElement('div');
         result.style.marginTop = '1em';
@@ -57,6 +57,71 @@ function aggregate_scores (
     return rating * result_mul;
 }
 
+async function fetch_scores(username, target_rank) {
+    const bearer = localStorage.getItem('auth._token.local');
+    if (!bearer) { 
+        console.error("Token not found! Make sure you are logged in...");
+        return;
+    }
+    let list = [];
+    // let avg = 0.0;
+    let curr_page = 1;
+    let max_pages = 1;
+
+    while (curr_page <= max_pages) try {
+        const response = await fetch(`https://api.etternaonline.com/api/users/${username}/scores?page=${curr_page}`, {
+            method: "GET",
+            headers: {
+                "Authorization": `${bearer}`,
+                "Accept": "application/json"
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const json = await response.json();
+        const data = json.data || [];
+        data.forEach(it => {
+            if (it.grade === target_rank) {
+                const name = it.song.name;
+                const overall = it.overall;
+                
+                list.push({ name, overall });
+            }
+        });
+        const total_pages = json.meta.last_page || null; 
+        if (!total_pages) {
+            break;
+        }
+        max_pages = total_pages;
+        console.log(`Fetched page: ${curr_page} / ${max_pages} from player's scores`);
+        curr_page++;
+        // rate limit 
+        sleep(200);
+    } catch (error) {
+        console.error("Failed to fetch schores:", error);
+        break;
+    }
+    list.sort((a, b) => b.overall - a.overall);
+    list.length = Math.min(list.length, 250);
+    const overall = aggregate_scores(
+        list.map(it => it.overall),
+        0.1,
+        1.05,
+        0.0,
+        10.24
+    );
+    display_overall({ overall, target_rank, list });
+    // Save to local storage
+    localStorage.setItem(`etterna_aaa_overall_${username}`, JSON.stringify({
+        version: version,
+        overall: overall,
+        list: list
+    }));
+}
+
 (async function() {
     'use strict';
 
@@ -70,6 +135,17 @@ function aggregate_scores (
     const raw_username = split[1];
     const username = raw_username.split(/[#?\/]/)[0];
     console.log(`Detected username: ${username}`);
+
+    const card_body = document.querySelector('.rank');
+    if (card_body) {
+        const button = document.createElement('button');
+        button.textContent = 'Fetch AAA Overall MSD';
+        button.style.marginTop = '1em';
+        button.onclick = function() {
+            fetch_scores(username, target_rank);
+        };
+        card_body.appendChild(button);
+    }
 
     let should_calc = true;
     const last_fetch = localStorage.getItem(`etterna_aaa_overall_${username}`); 
@@ -88,72 +164,5 @@ function aggregate_scores (
         display_overall({ overall: saved.overall, target_rank: target_rank, list: saved.list });
         return;
     }
-    // Configuration
-    const bearer = localStorage.getItem('auth._token.local');
-    if (!bearer) { 
-        console.error("Token not found! Make sure you are logged in...");
-        return;
-    }
-    async function fetch_scores() {
-        let list = [];
-        // let avg = 0.0;
-        let curr_page = 1;
-        let max_pages = 1;
-
-        while (curr_page <= max_pages) try {
-            const response = await fetch(`https://api.etternaonline.com/api/users/${username}/scores?page=${curr_page}`, {
-                method: "GET",
-                headers: {
-                    "Authorization": `${bearer}`,
-                    "Accept": "application/json"
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const json = await response.json();
-            const data = json.data || [];
-            data.forEach(it => {
-                if (it.grade === target_rank) {
-                    const name = it.song.name;
-                    const overall = it.overall;
-                    
-                    list.push({ name, overall });
-                }
-            });
-            const total_pages = json.meta.last_page || null; 
-            if (!total_pages) {
-                break;
-            }
-            max_pages = total_pages;
-            console.log(`Fetched page: ${curr_page} / ${max_pages} from player's scores`);
-            curr_page++;
-            // rate limit 
-            sleep(200);
-        } catch (error) {
-            console.error("Failed to fetch schores:", error);
-            break;
-        }
-        list.sort((a, b) => b.overall - a.overall);
-        list.length = Math.min(list.length, 250);
-        const overall = aggregate_scores(
-            list.map(it => it.overall),
-            0.1,
-            1.05,
-            0.0,
-            10.24
-        );
-        display_overall({ overall, target_rank, list });
-        // Save to local storage
-        localStorage.setItem(`etterna_aaa_overall_${username}`, JSON.stringify({
-            version: version,
-            overall: overall,
-            list: list
-        }));
-    }
-    // Run the function
-    fetch_scores();
-
+    await fetch_scores(username, target_rank);
 })();
