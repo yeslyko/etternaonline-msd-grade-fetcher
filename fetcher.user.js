@@ -10,6 +10,11 @@
 // ==/UserScript==
 // javascript sucks, sorry I don't know this language well
 
+
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // source: https://github.com/etternagame/etterna/blob/master/src/Etterna/MinaCalc/MinaCalcHelpers.h#L35
 function aggregate_scores (
     score_list = [], 
@@ -57,7 +62,7 @@ function aggregate_scores (
     const raw_username = split[1];
     const username = raw_username.split(/[#?\/]/)[0];
     console.log(`Detected username: ${username}`);
-    const target_rank = "A";
+    const target_rank = "AAA";
 
     async function fetch_scores() {
         let list = [];
@@ -65,7 +70,7 @@ function aggregate_scores (
         let curr_page = 1;
         let max_pages = 1;
 
-        while (curr_page <= max_pages && curr_page < 5) try {
+        while (curr_page <= max_pages) try {
             const response = await fetch(`https://api.etternaonline.com/api/users/${username}/scores?page=${curr_page}`, {
                 method: "GET",
                 headers: {
@@ -95,6 +100,8 @@ function aggregate_scores (
             max_pages = total_pages;
             console.log(`Fetched page: ${curr_page} / ${max_pages} from player's scores`);
             curr_page++;
+            // rate limit 
+            sleep(200);
         } catch (error) {
             console.error("Failed to fetch schores:", error);
             break;
