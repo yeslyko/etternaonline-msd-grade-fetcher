@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Etterna Score Analyzer
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.1.1
 // @description  Fetch and calculate MSD from "AAA" rank scores
 // @require      https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js
 // @author       gero
@@ -10,7 +10,16 @@
 // ==/UserScript==
 // javascript sucks, sorry I don't know this language well
 
-let version = '1.1';
+let version = '1.1.1';
+
+const Grade = {
+    A:          80.0,
+    AA:         93.0,
+    AAA:        99.7,
+    AAAA:       99.955,
+    AAAAA:      99.9935
+};
+
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -26,7 +35,7 @@ function display_overall(data) {
 
 // source: https://github.com/etternagame/etterna/blob/master/src/Etterna/MinaCalc/MinaCalcHelpers.h#L35
 function aggregate_scores (
-    score_list = [], 
+    score_list, 
     delta_mul, 
     result_mul, 
     rating, 
@@ -84,13 +93,12 @@ async function fetch_scores(username, target_rank) {
 
             if (response.ok) {
                 break;
-            } else {
-                console.error(response);
-                console.error(`Attempt ${retryCount + 1}: Something went wrong with EO connection, status: ${response.status}. Retrying in ${retryTime/1000} seconds.`);
-                await sleep(retryTime);
-
-                retryTime += 5000;
             }
+            console.error(response);
+            console.error(`Attempt ${retryCount + 1}: Something went wrong with EO connection, status: ${response.status}. Retrying in ${retryTime/1000} seconds.`);
+            await sleep(retryTime);
+
+            retryTime += 5000;
 
             if (retryCount === maxRetries - 1) {
                 throw new Error("Retry count exceeded, giving up.");
@@ -100,9 +108,10 @@ async function fetch_scores(username, target_rank) {
         const json = await response.json();
         const data = json.data || [];
         data.forEach(it => {
-            if (it.grade === target_rank) {
+            if (it.wife > target_rank && it.valid === true) {
                 const name = it.song.name;
                 const overall = it.overall;
+                console.log(`[DEBUG]: ${name}: ${overall}, page: ${curr_page}`);
                 
                 list.push({ name, overall });
             }
@@ -141,7 +150,7 @@ async function fetch_scores(username, target_rank) {
 (async function() {
     'use strict';
 
-    const target_rank = "AAA";
+    const target_rank = Grade.AAA;
     const path = window.location.pathname;
     const split = path.split('/').filter(segment => segment.length > 0);
     if (split.length < 1) {
